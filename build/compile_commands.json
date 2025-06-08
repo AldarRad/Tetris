@@ -1,0 +1,8 @@
+[
+{
+  "directory": "D:/Projects/Tetris/build",
+  "command": "C:\\msys64\\mingw64\\bin\\c++.exe -g -o CMakeFiles\\titris.dir\\main.cpp.obj -c D:\\Projects\\Tetris\\main.cpp",
+  "file": "D:\\Projects\\Tetris\\main.cpp",
+  "output": "CMakeFiles\\titris.dir\\main.cpp.obj"
+}
+]
