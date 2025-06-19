@@ -3,9 +3,14 @@ project(titris VERSION 0.1.0 LANGUAGES C CXX)
 
 add_executable(titris main.cpp)
 
+add_library(g Game.cpp)
+
+target_link_libraries(titris g)
+
 set(SFML_DIR "D:\\SFML\\SFML-2.6.2-windows-gcc-13.1.0-mingw-64-bit\\SFML-2.6.2")
 
 find_package(SFML 2.5 COMPONENTS system window graphics network audio REQUIRED)
+
 
 include(CTest)
 enable_testing()

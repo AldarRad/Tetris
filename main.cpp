@@ -12,7 +12,7 @@
 const int CELL_SIZE = 30;
 const int FIELD_WIDTH = 10;
 const int FIELD_HEIGHT = 20;
-const int WINDOW_WIDTH = FIELD_WIDTH * CELL_SIZE + 200;
+const int WINDOW_WIDTH = FIELD_WIDTH * CELL_SIZE + 300;
 const int WINDOW_HEIGHT = FIELD_HEIGHT * CELL_SIZE;
 
 struct Tetromino {
@@ -24,7 +24,7 @@ struct Tetromino {
 struct GameResult {
     std::string timestamp;
     int score;
-    std::string result; // "WIN" или "LOSE"
+    std::string result; // "ПОБЕДА" или "ПОРАЖЕНИЕ"
 };
 
 class Game {
@@ -41,6 +41,14 @@ private:
     bool isGameFinished;
     bool showResults;
     sf::Font font;
+    bool isPaused;
+    bool inMainMenu;
+    bool showRating;
+    std::vector<std::string> menuItems;
+    int selectedMenuItem;
+    sf::RectangleShape restartButton;
+    sf::Text restartButtonText;
+    sf::RectangleShape fieldBorder;
 
     std::vector<Tetromino> pieces = {
         { { {1, 1, 1, 1} }, sf::Color::Cyan, 0, 0 },
@@ -66,7 +74,7 @@ private:
             }
             file.close();
         }
-        // Sort by score descending
+        // Сортировка по очкам (по убыванию)
         std::sort(bestResults.begin(), bestResults.end(), 
             [](const GameResult& a, const GameResult& b) {
                 return a.score > b.score;
@@ -83,7 +91,7 @@ private:
             }
             file.close();
         } else {
-            std::cerr << "Error: Unable to save results to file!" << std::endl;
+            std::cerr << "Ошибка: Не удалось сохранить результаты в файл!" << std::endl;
         }
     }
 
@@ -101,7 +109,7 @@ private:
         gameResult.result = result;
 
         bestResults.push_back(gameResult);
-        // Sort by score descending
+        // Сортировка по очкам (по убыванию)
         std::sort(bestResults.begin(), bestResults.end(), 
             [](const GameResult& a, const GameResult& b) {
                 return a.score > b.score;
@@ -117,7 +125,21 @@ private:
         if (!isGameFinished) {
             isGameFinished = true;
             addResult(score, result);
+            inMainMenu = true;
         }
+    }
+
+    void initRestartButton() {
+        restartButtonText.setString("Restart (R)");
+
+    }
+
+    void initFieldBorder() {
+        fieldBorder.setSize(sf::Vector2f(FIELD_WIDTH * CELL_SIZE + 2, FIELD_HEIGHT * CELL_SIZE + 2));
+        fieldBorder.setPosition(-1, -1);
+        fieldBorder.setFillColor(sf::Color::Transparent);
+        fieldBorder.setOutlineThickness(2);
+        fieldBorder.setOutlineColor(sf::Color::White);
     }
 
 public:
@@ -125,7 +147,11 @@ public:
              field(FIELD_HEIGHT, std::vector<sf::Color>(FIELD_WIDTH, sf::Color::Black)),
              elapsedTime(0), delay(0.5f), score(0), 
              isGameOver(false), isGameWon(false), isGameFinished(false),
-             showResults(false) {
+             showResults(false), isPaused(false), inMainMenu(true),
+             showRating(false), selectedMenuItem(0) {
+        
+        menuItems = {"Start Game", "View Rating", "Exit"};
+        
         // Проверяем и создаем файл результатов, если его нет
         std::ifstream checkFile("tetris_results.txt");
         if (!checkFile.good()) {
@@ -133,10 +159,12 @@ public:
             createFile.close();
         }
         if (!font.loadFromFile("C:\\Windows\\Fonts\\Arial.ttf")) {
-            std::cerr << "Error loading font!" << std::endl;
+            std::cerr << "Ошибка загрузки шрифта!" << std::endl;
         }
+
+        initRestartButton();
+        initFieldBorder();
         loadResults();
-        resetGame();
     }
 
     void resetGame() {
@@ -147,7 +175,7 @@ public:
         isGameOver = false;
         isGameWon = false;
         isGameFinished = false;
-        showResults = false;
+        isPaused = false;
         spawnPiece();
     }
 
@@ -202,7 +230,7 @@ public:
     }
 
     void rotatePiece() {
-        if (isGameOver || isGameWon) return;
+        if (isGameOver || isGameWon || isPaused) return;
         
         std::vector<std::vector<int>> rotated(currentPiece.shape[0].size(), 
                                      std::vector<int>(currentPiece.shape.size()));
@@ -266,47 +294,94 @@ public:
             }
             
             if (event.type == sf::Event::KeyPressed) {
-                if (event.key.code == sf::Keyboard::Tab) {
-                    showResults = !showResults;
+                if (inMainMenu) {
+                    if (event.key.code == sf::Keyboard::Up) {
+                        selectedMenuItem = (selectedMenuItem - 1 + menuItems.size()) % menuItems.size();
+                    }
+                    else if (event.key.code == sf::Keyboard::Down) {
+                        selectedMenuItem = (selectedMenuItem + 1) % menuItems.size();
+                    }
+                    else if (event.key.code == sf::Keyboard::Enter) {
+                        if (selectedMenuItem == 0) { // Начать игру
+                            inMainMenu = false;
+                            resetGame();
+                        }
+                        else if (selectedMenuItem == 1) { // Рейтинг
+                            showRating = true;
+                        }
+                        else if (selectedMenuItem == 2) { // Выход
+                            window.close();
+                        }
+                    }
+                }
+                else if (showRating) {
+                    if (event.key.code == sf::Keyboard::Escape || event.key.code == sf::Keyboard::Enter) {
+                        showRating = false;
+                    }
                 }
                 else if (isGameOver || isGameWon) {
                     if (event.key.code == sf::Keyboard::R) {
-                        resetGame();
+                        inMainMenu = true;
+                    }
+                    else if (event.key.code == sf::Keyboard::Escape) {
+                        inMainMenu = true;
                     }
                 }
                 else {
-                    if (event.key.code == sf::Keyboard::Left) {
-                        currentPiece.x--;
-                        if (!isValidPosition()) currentPiece.x++;
+                    if (event.key.code == sf::Keyboard::Escape) {
+                        isPaused = !isPaused;
                     }
-                    else if (event.key.code == sf::Keyboard::Right) {
-                        currentPiece.x++;
-                        if (!isValidPosition()) currentPiece.x--;
+                    else if (event.key.code == sf::Keyboard::Tab) {
+                        showResults = !showResults;
                     }
-                    else if (event.key.code == sf::Keyboard::Down) {
-                        currentPiece.y++;
-                        if (!isValidPosition()) {
+                    else if (event.key.code == sf::Keyboard::R) {
+                        resetGame();
+                    }
+                    else if (!isPaused) {
+                        if (event.key.code == sf::Keyboard::Left) {
+                            currentPiece.x--;
+                            if (!isValidPosition()) currentPiece.x++;
+                        }
+                        else if (event.key.code == sf::Keyboard::Right) {
+                            currentPiece.x++;
+                            if (!isValidPosition()) currentPiece.x--;
+                        }
+                        else if (event.key.code == sf::Keyboard::Down) {
+                            currentPiece.y++;
+                            if (!isValidPosition()) {
+                                currentPiece.y--;
+                                lockPiece();
+                            }
+                        }
+                        else if (event.key.code == sf::Keyboard::Up) {
+                            rotatePiece();
+                        }
+                        else if (event.key.code == sf::Keyboard::Space) {
+                            while (isValidPosition()) {
+                                currentPiece.y++;
+                            }
                             currentPiece.y--;
                             lockPiece();
                         }
                     }
-                    else if (event.key.code == sf::Keyboard::Up) {
-                        rotatePiece();
-                    }
-                    else if (event.key.code == sf::Keyboard::Space) {
-                        while (isValidPosition()) {
-                            currentPiece.y++;
-                        }
-                        currentPiece.y--;
-                        lockPiece();
-                    }
+                }
+            }
+            
+            // Обработка клика по кнопке "Заново"
+            if (event.type == sf::Event::MouseButtonPressed && 
+                event.mouseButton.button == sf::Mouse::Left &&
+                !inMainMenu && !showRating) {
+                
+                sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+                if (restartButton.getGlobalBounds().contains(mousePos.x, mousePos.y)) {
+                    resetGame();
                 }
             }
         }
     }
 
     void update(float deltaTime) {
-        if (isGameOver || isGameWon) return;
+        if (inMainMenu || isGameOver || isGameWon || isPaused) return;
         
         elapsedTime += deltaTime;
         if (elapsedTime >= delay) {
@@ -319,8 +394,76 @@ public:
         }
     }
 
-    void render() {
+    void renderMainMenu() {
         window.clear(sf::Color::Black);
+        
+        sf::Text title("TETRIS", font, 50);
+        title.setPosition(WINDOW_WIDTH / 2 - title.getGlobalBounds().width / 2, 50);
+        title.setFillColor(sf::Color::White);
+        window.draw(title);
+        
+        for (size_t i = 0; i < menuItems.size(); ++i) {
+            sf::Text item(menuItems[i], font, 30);
+            item.setPosition(WINDOW_WIDTH / 2 - item.getGlobalBounds().width / 2, 150 + i * 50);
+            
+            if (i == selectedMenuItem) {
+                item.setFillColor(sf::Color::Yellow);
+                item.setStyle(sf::Text::Bold);
+            } else {
+                item.setFillColor(sf::Color::White);
+            }
+            
+            window.draw(item);
+        }
+        
+        sf::Text hint("Use UP/DOWN arrows to select, ENTER to confirm", font, 16);
+        hint.setPosition(WINDOW_WIDTH / 2 - hint.getGlobalBounds().width / 2, WINDOW_HEIGHT - 50);
+        hint.setFillColor(sf::Color(150, 150, 150));
+        window.draw(hint);
+        
+        window.display();
+    }
+
+    void renderRating() {
+        window.clear(sf::Color::Black);
+        
+        sf::Text title("TOP 10 RESULTS", font, 40);
+        title.setPosition(WINDOW_WIDTH / 2 - title.getGlobalBounds().width / 2, 30);
+        title.setFillColor(sf::Color::Yellow);
+        window.draw(title);
+        
+        if (bestResults.empty()) {
+            sf::Text noResults("No results yet!", font, 30);
+            noResults.setPosition(WINDOW_WIDTH / 2 - noResults.getGlobalBounds().width / 2, 150);
+            noResults.setFillColor(sf::Color::White);
+            window.draw(noResults);
+        } else {
+            for (size_t i = 0; i < bestResults.size(); ++i) {
+                std::string resultStr = std::to_string(i+1) + ". " + 
+                                      bestResults[i].timestamp + " - " +
+                                      std::to_string(bestResults[i].score) + " - " +
+                                      bestResults[i].result;
+                
+                sf::Text resultText(resultStr, font, 20);
+                resultText.setPosition(50, 100 + i * 30);
+                resultText.setFillColor(sf::Color::White);
+                window.draw(resultText);
+            }
+        }
+        
+        sf::Text hint("Press ESC or ENTER to return", font, 20);
+        hint.setPosition(WINDOW_WIDTH / 2 - hint.getGlobalBounds().width / 2, WINDOW_HEIGHT - 50);
+        hint.setFillColor(sf::Color(150, 150, 150));
+        window.draw(hint);
+        
+        window.display();
+    }
+
+    void renderGame() {
+        window.clear(sf::Color::Black);
+        
+        // Рисуем границу игрового поля
+        window.draw(fieldBorder);
         
         // Рисуем игровое поле
         for (int i = 0; i < FIELD_HEIGHT; ++i) {
@@ -357,23 +500,35 @@ public:
         if (font.loadFromFile("C:\\Windows\\Fonts\\Arial.ttf")) {
             // Текущие показатели
             sf::Text scoreText("Score: " + std::to_string(score), font, 20);
-            scoreText.setPosition(FIELD_WIDTH * CELL_SIZE + 10, 20);
+            scoreText.setPosition(FIELD_WIDTH * CELL_SIZE + 20, 20);
             scoreText.setFillColor(sf::Color::White);
             window.draw(scoreText);
+            
+            // Кнопка "Заново"
+            window.draw(restartButton);
+            window.draw(restartButtonText);
+            
+            // Сообщение о паузе
+            if (isPaused) {
+                sf::Text pauseText("PAUSED\nPress ESC to continue", font, 30);
+                pauseText.setPosition(FIELD_WIDTH * CELL_SIZE + 20, 100);
+                pauseText.setFillColor(sf::Color::Yellow);
+                window.draw(pauseText);
+            }
             
             // Сообщения о завершении игры
             if (isGameOver) {
                 sf::Text gameOverText("GAME OVER\nScore: " + std::to_string(score) + 
-                                     "\nPress R to restart", font, 24);
-                gameOverText.setPosition(FIELD_WIDTH * CELL_SIZE + 10, 100);
+                                     "\nPress R to return to menu", font, 24);
+                gameOverText.setPosition(FIELD_WIDTH * CELL_SIZE + 20, 100);
                 gameOverText.setFillColor(sf::Color::Red);
                 window.draw(gameOverText);
             }
             
             if (isGameWon) {
                 sf::Text winText("YOU WIN!\nScore: " + std::to_string(score) + 
-                                "\nPress R to restart", font, 24);
-                winText.setPosition(FIELD_WIDTH * CELL_SIZE + 10, 100);
+                                "\nPress R to return to menu", font, 24);
+                winText.setPosition(FIELD_WIDTH * CELL_SIZE + 20, 100);
                 winText.setFillColor(sf::Color::Green);
                 window.draw(winText);
             }
@@ -401,6 +556,19 @@ public:
                     window.draw(resultText);
                 }
             }
+            
+            // Подсказки управления
+            sf::Text controls("Controls:\n"
+                             "Left/Right: Move\n"
+                             "Up: Rotate\n"
+                             "Down: Drop faster\n"
+                             "Space: Instant drop\n"
+                             "ESC: Pause\n"
+                             "Tab: Show results\n"
+                             "R: Restart", font, 16);
+            controls.setPosition(FIELD_WIDTH * CELL_SIZE + 20, WINDOW_HEIGHT - 180);
+            controls.setFillColor(sf::Color(150, 150, 150));
+            window.draw(controls);
         }
         
         window.display();
@@ -411,8 +579,17 @@ public:
         while (window.isOpen()) {
             float deltaTime = clock.restart().asSeconds();
             handleInput();
-            update(deltaTime);
-            render();
+            
+            if (inMainMenu) {
+                renderMainMenu();
+            } 
+            else if (showRating) {
+                renderRating();
+            }
+            else {
+                update(deltaTime);
+                renderGame();
+            }
         }
     }
 };
